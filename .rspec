@@ -1,6 +1,5 @@
 --default-path ./
---exclude-pattern vendor/**/*
---exclude-pattern **/vendor/**/*
+--pattern {spec,*/spec}/**/*_spec.rb
 --require ./spec_helper
 --color
 --format d
