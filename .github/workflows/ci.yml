@@ -61,6 +61,7 @@ jobs:
         run: ruby -v
 
       - name: Setup Build directories
+        if: runner.os != 'Windows'
         run: mkdir -p "$TEST_REPORTS"
 
       - name: Check PR Metadata (Danger)
