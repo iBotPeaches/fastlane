@@ -37,6 +37,8 @@ end
 
 my_main = self
 RSpec.configure do |config|
+  config.exclude_pattern = '{vendor}/**/*'
+
   config.before(:each) do |current_test|
     # We don't want to call the RubyGems API at any point
     # This was a request that was added with Ruby 2.4.0
