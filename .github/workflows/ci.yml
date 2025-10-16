@@ -64,18 +64,16 @@ jobs:
         if: runner.os != 'Windows'
         run: mkdir -p "$TEST_REPORTS"
 
-      - name: Check PR Metadata (Danger)
-        env:
-          DANGER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bundle exec danger || echo "danger failed"
+      - name: Increase Open File Limit
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ulimit -n 65536
 
       - name: Run tests
         env:
           RUBYOPT: ${{ matrix.rubyopt }}
         shell: bash
-        run: |
-          ulimit -n 65536
-          bundle exec fastlane execute_tests
+        run: bundle exec fastlane execute_tests
 
       - name: Check compatibility with Ruby 3.0
         shell: bash
@@ -100,11 +98,21 @@ jobs:
           path: ${{ env.TEST_REPORTS }}/ruby_warnings.txt
           if-no-files-found: ignore
 
-      - name: Post Test Results to GitHub (Danger)
-        if: always()
+  danger:
+    name: Danger
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Run Danger
         env:
           DANGER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bundle exec danger || echo "danger failed"
+        run: bundle exec danger
 
   validate_fastlane_swift_generation:
     name: Validate Fastlane.swift generation
