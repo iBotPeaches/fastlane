@@ -9,12 +9,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  checks: write
-
 env:
   TEST_REPORTS: ${{ github.workspace }}/test-reports
   CIRCLE_TEST_REPORTS: ${{ github.workspace }}/test-reports
@@ -97,22 +91,6 @@ jobs:
           name: ruby_warnings-${{ matrix.xcode }}-ruby-${{ matrix.ruby }}.txt
           path: ${{ env.TEST_REPORTS }}/ruby_warnings.txt
           if-no-files-found: ignore
-
-  danger:
-    name: Danger
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.3'
-          bundler-cache: true
-
-      - name: Run Danger
-        env:
-          DANGER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bundle exec danger
 
   validate_fastlane_swift_generation:
     name: Validate Fastlane.swift generation
