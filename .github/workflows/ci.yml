@@ -34,7 +34,7 @@ jobs:
           - { xcode: '16.2', ruby: '3.2', rubyopt: '', os: 'macos-14' }
           # - { xcode: '26.0.1', ruby: '3.3', rubyopt: '', os: 'macos-15' }
           - { xcode: '', ruby: '3.3', rubyopt: '', os: 'ubuntu-24.04' }
-          - { xcode: '', ruby: '3.2', rubyopt: '', os: 'windows-2025' }
+          - { xcode: '', ruby: '3.2', rubyopt: '', os: 'windows-2022' }
     steps:
       - uses: actions/checkout@v4
 
