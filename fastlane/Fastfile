@@ -575,7 +575,7 @@ lane :update_docs do |options|
   version = options[:version]
 
   unless debug
-    verify_env_variables
+    verify_env_variables(skip_ruby_gems: true)
     ensure_actions_config_items_formatting
   end
 
@@ -600,7 +600,8 @@ lane :update_docs do |options|
 
     unless options[:skip_bundle_update]
       Bundler.with_clean_env do
-        sh("bundle update")
+        sh("bundle config set path 'vendor/bundle'")
+        sh("bundle install")
       end
     end
 

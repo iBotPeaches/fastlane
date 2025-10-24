@@ -4,6 +4,7 @@ module Fastlane
       require 'faraday'
       require 'faraday_middleware'
       require 'yaml'
+      require 'date'
 
       class FastlanePluginRating
         attr_accessor :key
@@ -67,7 +68,12 @@ module Fastlane
           }
 
           if File.exist?(cache_path)
-            self.cache = YAML.load_file(cache_path)
+            self.cache = YAML.safe_load(
+              File.read(cache_path),
+              permitted_classes: [Date, Time, Symbol, FastlanePluginAction],
+              aliases: true,
+              symbolize_names: true
+            )
           else
             self.cache = {}
           end
@@ -190,11 +196,14 @@ module Fastlane
         def append_git_data
           Dir.mktmpdir("fastlane-plugin") do |tmp|
             clone_folder = File.join(tmp, self.name)
-            `GIT_TERMINAL_PROMPT=0 git clone #{self.homepage.shellescape} #{clone_folder.shellescape}`
+            `GIT_TERMINAL_PROMPT=0 git clone --depth=1 #{self.homepage.shellescape} #{clone_folder.shellescape}`
 
             break unless File.directory?(clone_folder)
 
             Dir.chdir(clone_folder) do
+              first_hash = `git rev-list --max-parents=0 HEAD`
+              `git fetch --depth=1 origin #{first_hash}`
+              `git checkout #{first_hash}`
               # Taken from https://github.com/CocoaPods/cocoadocs.org/blob/master/classes/stats_generator.rb
               self.data[:initial_commit] = DateTime.parse(`git rev-list --all|tail -n1|xargs git show|grep -v diff|head -n3|tail -1|cut -f2-8 -d' '`.strip).to_date
               self.data[:age_in_days] = (DateTime.now - self.data[:initial_commit]).to_i
