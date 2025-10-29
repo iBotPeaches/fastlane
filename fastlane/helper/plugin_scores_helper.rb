@@ -1,8 +1,7 @@
 module Fastlane
   module Helper
     module PluginScoresHelper
-      require 'faraday'
-      require 'faraday_middleware'
+      require 'octokit'
       require 'yaml'
       require 'date'
 
@@ -60,6 +59,7 @@ module Fastlane
             has_info: self.info.to_s.length > 5,
             downloads: self.downloads,
             has_github_page: has_github_page,
+            has_opensource_repo: nil,
             has_mit_license: includes_license?("MIT"),
             has_gnu_license: includes_license?("GNU") || includes_license?("GPL"),
             major_release: Gem::Version.new(hash["version"]) >= Gem::Version.new("1.0.0"),
@@ -84,12 +84,17 @@ module Fastlane
               self.append_git_data
               self.append_github_data
             end
+          else
+            self.data[:has_opensource_repo] = false if self.data[:has_opensource_repo].nil?
+            self.cache[self.name] ||= {}
+            self.cache[self.name][:has_opensource_repo] = self.data[:has_opensource_repo]
           end
 
           File.open(cache_path, 'w') do |file|
             file.write(self.cache.to_yaml)
           end
 
+          self.data[:has_opensource_repo] = false if self.data[:has_opensource_repo].nil?
           self.data[:overall_score] = 0
           self.data[:ratings] = self.ratings.collect do |current_rating|
             [
@@ -133,12 +138,25 @@ module Fastlane
                              description: "Lots of open issues are not a good sign usually, unless the project is really popular",
                                    value: (self.data[:github_issues].to_i * -1)),
             FastlanePluginRating.new(key: :downloads,
-                             description: "More downloads = more users have been using the plugin for a while",
-                                   value: (self.data[:downloads].to_i / 250)),
+                             description: "Downloads scaled 0–1000 points with max at 150k downloads",
+                                   value: downloads_score(self.data[:downloads].to_i)),
             FastlanePluginRating.new(key: :tests,
                              description: "The more tests a plugin has, the better",
-                                   value: [self.data[:tests].to_i * 3, 80].min)
+                                   value: [self.data[:tests].to_i * 3, 80].min),
+            FastlanePluginRating.new(key: :open_source,
+                             description: "fastlane is open source, it's good to have plugins open source too",
+                                   value: (self.data[:has_opensource_repo] ? 10 : -100))
           ]
+        end
+
+        # Downloads score: linearly scale 0..150_000 downloads to 0..1_000 points and cap at max.
+        def downloads_score(count)
+          max_downloads = 150_000
+          max_score = 1_000
+          c = count.to_i
+          c = 0 if c < 0
+          scaled = ((c.to_f / max_downloads) * max_score).round
+          scaled > max_score ? max_score : scaled
         end
 
         # What colors should the overall score be printed in
@@ -184,6 +202,7 @@ module Fastlane
             self.data[:github_issues] = cache_data[:github_issues]
             self.data[:github_forks] = cache_data[:github_forks]
             self.data[:github_contributors] = cache_data[:github_contributors]
+            self.data[:has_opensource_repo] = cache_data.key?(:has_opensource_repo) ? cache_data[:has_opensource_repo] : self.data[:has_opensource_repo]
 
             return true
           end
@@ -242,37 +261,36 @@ module Fastlane
 
         # Everything from the GitHub API (e.g. open issues and stars)
         def append_github_data
-          # e.g. https://api.github.com/repos/fastlane/fastlane
-          url = self.homepage.gsub("github.com/", "api.github.com/repos/")
-          url = url[0..-2] if url.end_with?("/") # what is this, 2001? We got to remove the trailing `/` otherwise GitHub will fail
-          puts("Fetching #{url}")
-          conn = Faraday.new(url: url) do |builder|
-            # The order below IS important
-            # See bug here https://github.com/lostisland/faraday_middleware/issues/105
-            builder.use(FaradayMiddleware::FollowRedirects)
-            builder.adapter(Faraday.default_adapter)
+          # Convert GitHub homepage to repo identifier "owner/repo"
+          repo = self.homepage.to_s.sub(%r{https?://github.com/}, '')
+          repo = repo[0..-2] if repo.end_with?("/")
+          repo = repo.split('/')[0, 2].join('/')
+
+          client = Octokit::Client.new(login: ENV["GITHUB_USER_NAME"], access_token: ENV["GITHUB_API_TOKEN"])
+
+          # Fetch repo details
+          puts("Fetching repo details for #{repo}")
+          repo_details = client.repo(repo)
+          is_public = repo_details && (repo_details[:private] == false)
+          self.data[:has_opensource_repo] = is_public
+
+          # Fetch contributors stats with polling as GitHub may return 202 while generating
+          puts("Fetching contributors stats for #{repo}")
+          max_attempts = 12
+          attempt = 1
+          contributor_details = client.contributors_stats(repo)
+          while attempt <= max_attempts && contributor_details.nil?
+            puts("Contributors stats not ready (202). Attempt #{attempt}/#{max_attempts}, retrying in 10s...")
+            sleep(10)
+            contributor_details = client.contributors_stats(repo)
+            attempt += 1
           end
-          conn.basic_auth(ENV["GITHUB_USER_NAME"], ENV["GITHUB_API_TOKEN"])
-          response = conn.get('')
-          repo_details = JSON.parse(response.body)
+          contributor_details ||= []
 
-          url += "/stats/contributors"
-          puts("Fetching #{url}")
-          conn = Faraday.new(url: url) do |builder|
-            # The order below IS important
-            # See bug here https://github.com/lostisland/faraday_middleware/issues/105
-            builder.use(FaradayMiddleware::FollowRedirects)
-            builder.adapter(Faraday.default_adapter)
-          end
-
-          conn.basic_auth(ENV["GITHUB_USER_NAME"], ENV["GITHUB_API_TOKEN"])
-          response = conn.get('')
-          contributor_details = JSON.parse(response.body)
-
-          self.data[:github_stars] = repo_details["stargazers_count"].to_i
-          self.data[:github_subscribers] = repo_details["subscribers_count"].to_i
-          self.data[:github_issues] = repo_details["open_issues_count"].to_i
-          self.data[:github_forks] = repo_details["forks_count"].to_i
+          self.data[:github_stars] = repo_details[:stargazers_count].to_i
+          self.data[:github_subscribers] = repo_details[:subscribers_count].to_i
+          self.data[:github_issues] = repo_details[:open_issues_count].to_i
+          self.data[:github_forks] = repo_details[:forks_count].to_i
           self.data[:github_contributors] = contributor_details.count
 
           cache_data = self.cache[self.name]
@@ -282,12 +300,17 @@ module Fastlane
           cache_data[:github_issues] = self.data[:github_issues]
           cache_data[:github_forks] = self.data[:github_forks]
           cache_data[:github_contributors] = self.data[:github_contributors]
+          cache_data[:has_opensource_repo] = self.data[:has_opensource_repo]
+        rescue Octokit::NotFound => _
+          puts("GitHub repo not found (404) for #{self}: #{self.homepage}")
+          self.data[:has_opensource_repo] = false if self.data[:has_opensource_repo].nil?
+          self.cache[self.name] ||= {}
+          self.cache[self.name][:has_opensource_repo] = self.data[:has_opensource_repo]
         rescue => ex
           puts("error fetching #{self}")
           puts(self.homepage)
-          puts("Chances are high you exceeded the GitHub API limit")
+          puts("Unexpected error while fetching GitHub data for #{self}: #{self.homepage}")
           puts(ex)
-          puts(ex.backtrace)
           raise ex
         end
       end
