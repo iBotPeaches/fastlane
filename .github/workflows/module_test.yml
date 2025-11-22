@@ -56,6 +56,13 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
 
+      - name: Cache installed gems (GEM_HOME)
+        uses: actions/cache@v4
+        with:
+          path: sandbox_gems
+          key: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-${{ hashFiles('dist/*.gem') }}
+          restore-keys: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
+
       - name: Install gem in isolated GEM_HOME
         shell: bash
         run: |
@@ -63,7 +70,7 @@ jobs:
           mkdir -p sandbox_gems
           export GEM_HOME=$PWD/sandbox_gems
           export GEM_PATH=$PWD/sandbox_gems
-          gem install dist/*.gem
+          gem install --no-document dist/*.gem
 
       - name: Run module tests against built gem
         shell: bash
@@ -71,3 +78,36 @@ jobs:
           GEM_HOME: ${{ github.workspace }}/sandbox_gems
           GEM_PATH: ${{ github.workspace }}/sandbox_gems
         run: bash ./test_modules/run_tests.sh
+
+      - name: Sanity check fastlane CLI
+        shell: bash
+        env:
+          GEM_HOME: ${{ github.workspace }}/sandbox_gems
+          GEM_PATH: ${{ github.workspace }}/sandbox_gems
+        run: |
+          set -euo pipefail
+          # Ensure the installed gem's executables are available
+          export PATH="$GEM_HOME/bin:$PATH"
+
+          # Determine installed fastlane version from the gem
+          FASTLANE_VERSION=$(ruby -e "require 'fastlane'; puts Fastlane::VERSION")
+          echo "Detected fastlane version: ${FASTLANE_VERSION}"
+
+          # Check version output
+          VERSION_OUTPUT=$(fastlane --version)
+          echo "fastlane --version => ${VERSION_OUTPUT}"
+          if [[ "${VERSION_OUTPUT}" != *"fastlane ${FASTLANE_VERSION}"* ]]; then
+            echo "Expected 'fastlane ${FASTLANE_VERSION}' in version output" >&2
+            exit 1
+          fi
+
+          # Check actions list contains some core actions
+          ACTIONS_OUTPUT=$(fastlane actions)
+          echo "fastlane actions (truncated):"; echo "${ACTIONS_OUTPUT}" | head -n 100 || true
+          for action in gym pilot screengrab supply; do
+            echo "Verifying action present: $action"
+            echo "${ACTIONS_OUTPUT}" | grep -q "\b${action}\b" || {
+              echo "Action '${action}' not found in 'fastlane actions' output" >&2
+              exit 1
+            }
+          done
