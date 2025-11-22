@@ -38,6 +38,9 @@ jobs:
   module_tests:
     name: Module tests (Ruby ${{ matrix.ruby }} on ${{ matrix.os }})
     needs: build_gem_for_testing
+    env:
+      GEM_HOME: ${{ github.workspace }}/sandbox_gems
+      GEM_PATH: ${{ github.workspace }}/sandbox_gems
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -59,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: sandbox_gems
-          key: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-${{ hashFiles('dist/*.gem') }}
+          key: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
           restore-keys: |
             ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
 
@@ -74,16 +77,10 @@ jobs:
 
       - name: Run module tests against built gem
         shell: bash
-        env:
-          GEM_HOME: ${{ github.workspace }}/sandbox_gems
-          GEM_PATH: ${{ github.workspace }}/sandbox_gems
         run: bash ./test_modules/run_tests.sh
 
       - name: Sanity check fastlane CLI
         shell: bash
-        env:
-          GEM_HOME: ${{ github.workspace }}/sandbox_gems
-          GEM_PATH: ${{ github.workspace }}/sandbox_gems
         run: |
           set -euo pipefail
           export PATH="$GEM_HOME/bin:$PATH"
