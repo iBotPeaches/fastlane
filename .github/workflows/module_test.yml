@@ -33,6 +33,7 @@ jobs:
         with:
           name: fastlane-gem
           path: ${{ steps.build.outputs.gem_file }}
+          retention-days: 1
           if-no-files-found: error
 
   module_tests:
