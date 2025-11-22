@@ -20,14 +20,16 @@ TEST_MODULES=(
   "spaceship"
   "supply"
 )
-for TEST_MODULE in ${TEST_MODULES[*]}
+
+for TEST_MODULE in "${TEST_MODULES[@]}"
 do
   echo "Executing $TEST_MODULE module load up test"
   if ruby -e "require '$TEST_MODULE'"
   then
     echo "Succeed."
-    exit 0
   else
     exit 2
   fi
 done
+
+exit 0
