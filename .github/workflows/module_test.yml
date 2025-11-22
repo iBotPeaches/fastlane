@@ -13,9 +13,9 @@ concurrency:
 jobs:
   build_gem_for_testing:
     name: Build Gem
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -48,7 +48,7 @@ jobs:
         ruby: ['3.3', '3.4']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v4
         with:
