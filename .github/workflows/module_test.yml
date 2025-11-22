@@ -28,14 +28,45 @@ jobs:
           GEM_FILE=$(gem build fastlane.gemspec | grep "File:" | awk '{print $2}')
           echo "gem_file=$GEM_FILE" >> $GITHUB_OUTPUT
 
+      - name: Upload gem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastlane-gem
+          path: ${{ steps.build.outputs.gem_file }}
+          if-no-files-found: error
+
+  module_tests:
+    name: Module tests (Ruby ${{ matrix.ruby }} on ${{ matrix.os }})
+    needs: build_gem_for_testing
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ['3.0', '3.1', '3.2', '3.3', '3.4']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fastlane-gem
+          path: dist
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+
       - name: Install gem in isolated GEM_HOME
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p sandbox_gems
           export GEM_HOME=$PWD/sandbox_gems
           export GEM_PATH=$PWD/sandbox_gems
-          gem install "./${{ steps.build.outputs.gem_file }}"
+          gem install dist/*.gem
 
       - name: Run module tests against built gem
+        shell: bash
         env:
           GEM_HOME: ${{ github.workspace }}/sandbox_gems
           GEM_PATH: ${{ github.workspace }}/sandbox_gems
