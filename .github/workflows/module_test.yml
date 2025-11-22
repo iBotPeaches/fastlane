@@ -68,7 +68,7 @@ jobs:
 
       - name: Install gem in isolated GEM_HOME
         shell: bash
-        run: gem install --no-document dist/*.gem
+        run: gem install --no-document --env-shebang dist/*.gem
 
       - name: Run module tests against built gem
         shell: bash
