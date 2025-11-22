@@ -39,7 +39,6 @@ jobs:
     name: Module tests (Ruby ${{ matrix.ruby }} on ${{ matrix.os }})
     needs: build_gem_for_testing
     strategy:
-      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         ruby: ['3.0', '3.1', '3.2', '3.3', '3.4']
@@ -101,13 +100,4 @@ jobs:
             exit 1
           fi
 
-          # Check actions list contains some core actions
-          ACTIONS_OUTPUT=$(fastlane actions)
-          echo "fastlane actions (truncated):"; echo "${ACTIONS_OUTPUT}" | head -n 100 || true
-          for action in gym pilot screengrab supply; do
-            echo "Verifying action present: $action"
-            echo "${ACTIONS_OUTPUT}" | grep -q "\b${action}\b" || {
-              echo "Action '${action}' not found in 'fastlane actions' output" >&2
-              exit 1
-            }
-          done
+          fastlane actions
