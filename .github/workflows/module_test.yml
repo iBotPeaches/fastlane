@@ -86,7 +86,6 @@ jobs:
           GEM_PATH: ${{ github.workspace }}/sandbox_gems
         run: |
           set -euo pipefail
-          # Ensure the installed gem's executables are available
           export PATH="$GEM_HOME/bin:$PATH"
 
           # Determine installed fastlane version from the gem
@@ -101,4 +100,5 @@ jobs:
             exit 1
           fi
 
-          fastlane actions
+          # Run basic command
+          bundle exec fastlane actions
