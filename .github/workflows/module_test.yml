@@ -60,7 +60,8 @@ jobs:
         with:
           path: sandbox_gems
           key: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-${{ hashFiles('dist/*.gem') }}
-          restore-keys: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
+          restore-keys: |
+            ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
 
       - name: Install gem in isolated GEM_HOME
         shell: bash
