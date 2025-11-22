@@ -1,0 +1,123 @@
+name: Module Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_gem_for_testing:
+    name: Build Gem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Build gem
+        id: build
+        run: |
+          GEM_FILE=$(gem build fastlane.gemspec | grep "File:" | awk '{print $2}')
+          echo "gem_file=$GEM_FILE" >> $GITHUB_OUTPUT
+
+      - name: Upload gem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastlane-gem
+          path: ${{ steps.build.outputs.gem_file }}
+          retention-days: 1
+          if-no-files-found: error
+
+  module_tests:
+    name: Module tests (Ruby ${{ matrix.ruby }} on ${{ matrix.os }})
+    needs: build_gem_for_testing
+    env:
+      GEM_HOME: ${{ github.workspace }}/sandbox_gems
+      GEM_PATH: ${{ github.workspace }}/sandbox_gems
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ['3.3', '3.4']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fastlane-gem
+          path: dist
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+
+      - name: Cache installed gems (GEM_HOME)
+        uses: actions/cache@v4
+        with:
+          path: sandbox_gems
+          key: ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
+          restore-keys: |
+            ${{ runner.os }}-ruby-${{ matrix.ruby }}-gems-
+
+      - name: Install gem in isolated GEM_HOME
+        shell: bash
+        run: gem install --no-document --env-shebang dist/*.gem
+
+      - name: Run module tests against built gem
+        shell: bash
+        run: |
+          TEST_MODULES=(
+            "cert"
+            "credentials_manager"
+            "deliver"
+            "fastlane"
+            "fastlane_core"
+            "frameit"
+            "gym"
+            "match"
+            "pem"
+            "pilot"
+            "precheck"
+            "produce"
+            "scan"
+            "screengrab"
+            "snapshot"
+            "spaceship"
+            "supply"
+            )
+  
+          for TEST_MODULE in "${TEST_MODULES[@]}"; do
+            echo "Executing $TEST_MODULE module load up test"
+            if ruby -e "require '$TEST_MODULE'"; then
+              echo "Succeed."
+            else
+              exit 1
+            fi
+          done
+
+      - name: Sanity check fastlane CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$GEM_HOME/bin:$PATH"
+
+          # Determine installed fastlane version from the gem
+          FASTLANE_VERSION=$(ruby -e "require 'fastlane'; puts Fastlane::VERSION")
+          echo "Detected fastlane version: ${FASTLANE_VERSION}"
+
+          # Check version output
+          VERSION_OUTPUT=$(fastlane --version)
+          echo "fastlane --version => ${VERSION_OUTPUT}"
+          if [[ "${VERSION_OUTPUT}" != *"fastlane ${FASTLANE_VERSION}"* ]]; then
+            echo "Expected 'fastlane ${FASTLANE_VERSION}' in version output" >&2
+            exit 1
+          fi
+
+          # Run basic command
+          fastlane actions
