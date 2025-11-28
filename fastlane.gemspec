@@ -59,7 +59,8 @@ Gem::Specification.new do |spec|
     "changelog_uri" => "https://github.com/fastlane/fastlane/releases",
     "documentation_uri" => "https://docs.fastlane.tools/",
     "homepage_uri" => spec.homepage,
-    "source_code_uri" => "https://github.com/fastlane/fastlane"
+    "source_code_uri" => "https://github.com/fastlane/fastlane",
+    "github_repo" => "ssh://github.com/fastlane/fastlane"
   }
 
   spec.required_ruby_version = '>= 2.6'
