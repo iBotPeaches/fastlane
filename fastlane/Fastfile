@@ -350,12 +350,6 @@ lane :create_github_release do |options|
   # Verifying RubyGems version
   #
   version = local_version
-  old_version = current_version
-  if Gem::Version.new(version) <= Gem::Version.new(old_version)
-    UI.user_error!("Version number #{version} was already deployed")
-  end
-
-  github_username = ENV["RELEASE_GITHUB_USERNAME"] || "fastlane"
 
   update_docs(version: version) unless options[:skip_docs]
 end
