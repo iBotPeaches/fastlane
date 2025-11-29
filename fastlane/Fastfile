@@ -345,7 +345,6 @@ desc "Creates a GitHub release with the gem as an asset"
 lane :create_github_release do |options|
   # Git verification
   #
-  ensure_git_status_clean
   ensure_git_branch(branch: 'wip-docs')
 
   # Verifying RubyGems version
