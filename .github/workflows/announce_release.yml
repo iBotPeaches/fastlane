@@ -46,7 +46,7 @@ jobs:
         run: echo "FL_VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_ENV"
 
       - name: Announce release on released pull requests
-        uses: fastlane/github-actions/communicate-on-pull-request-released@latest
+        uses: fastlane/github-actions/communicate-on-pull-request-released@issue-141
         with:
           version: ${{ env.FL_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
