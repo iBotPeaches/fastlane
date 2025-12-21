@@ -28,6 +28,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
           name: release_tag
 
