@@ -44,10 +44,11 @@ jobs:
         FASTLANE_RELEASE_API_BEARER: ${{ secrets.GITHUB_TOKEN }}
         RELEASE_GITHUB_USERNAME: 'ibotpeaches'
       run: |
-        bundle exec fastlane create_github_release skip_github_packages:${{ github.event.inputs.skip_github_packages }} skip_rubygems:${{ github.event.inputs.skip_rubygems }}
+        bundle exec fastlane create_github_release \
+          skip_github_packages:${{ github.event.inputs.skip_github_packages }} \
+          skip_rubygems:${{ github.event.inputs.skip_rubygems }}
 
-    - name: Save tag for release announcement
-      run: echo "$FASTLANE_RELEASE_VERSION" > release_tag.txt
+        echo "$FASTLANE_RELEASE_VERSION" > release_tag.txt
 
     - uses: actions/upload-artifact@v6
       with:
