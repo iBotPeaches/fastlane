@@ -22,13 +22,8 @@ jobs:
   announce-release-on-released-pull-requests:
     name: Announce release on released pull requests
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          ref: master
-
       - name: Download release tag artifact
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v7
