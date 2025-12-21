@@ -48,8 +48,6 @@ jobs:
           skip_github_packages:${{ github.event.inputs.skip_github_packages }} \
           skip_rubygems:${{ github.event.inputs.skip_rubygems }}
 
-        echo "$FASTLANE_RELEASE_VERSION" > release_tag.txt
-
     - uses: actions/upload-artifact@v6
       with:
         name: release_tag
