@@ -94,6 +94,11 @@ module Spaceship
       def merchant
         Spaceship::Portal::Merchant.set_client(@client)
       end
+
+      # @return (Class) Access the authentication keys for the spaceship
+      def key
+        Spaceship::Portal::Key.set_client(@client)
+      end
     end
   end
 
@@ -149,6 +154,10 @@ module Spaceship
 
     def merchant
       Spaceship::Portal.merchant
+    end
+
+    def key
+      Spaceship::Portal.key
     end
   end
 end

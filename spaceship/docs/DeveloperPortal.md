@@ -248,6 +248,11 @@ Spaceship::Portal.certificate.production.create!(csr: csr)
 
 ### Authentication Keys
 
+```ruby
+# Access the keys of the currently selected team
+Spaceship::Portal.key.all
+```
+
 The authentication keys can be used for various Apple services. When creating a key, you can configure the following:
 
 - `name`: A descriptive name for your key

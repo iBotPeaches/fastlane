@@ -55,6 +55,7 @@ describe Fastlane do
           frame_screenshots
           get_provisioning_profile
           get_push_certificate
+          get_push_auth_key
           run_tests
           submit_build_to_app_store
           sync_code_signing
