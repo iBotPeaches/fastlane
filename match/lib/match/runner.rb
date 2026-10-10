@@ -28,6 +28,9 @@ module Match
 
     attr_accessor :cache
 
+    # The APNs authentication key synced by this run, if `push_auth_key` was set
+    attr_accessor :push_auth_key
+
     # rubocop:disable Metrics/PerceivedComplexity
     def run(params)
       self.files_to_commit = []
@@ -38,23 +41,7 @@ module Match
       FastlaneCore::PrintTable.print_values(config: params,
                                              title: "Summary for match #{Fastlane::VERSION}")
 
-      update_optional_values_depending_on_storage_type(params)
-
-      # Choose the right storage and encryption implementations
-      storage_params = params
-      storage_params[:username] = params[:readonly] ? nil : params[:username] # only pass username if not readonly
-      self.storage = Storage.from_params(storage_params)
-      storage.download
-
-      # Init the encryption only after the `storage.download` was called to have the right working directory
-      self.encryption = Encryption.for_storage_mode(params[:storage_mode], {
-        git_url: params[:git_url],
-        s3_bucket: params[:s3_bucket],
-        s3_skip_encryption: params[:s3_skip_encryption],
-        working_directory: storage.working_directory,
-        force_legacy_encryption: params[:force_legacy_encryption]
-      })
-      self.encryption.decrypt_files if self.encryption
+      prepare_storage(params)
 
       unless params[:readonly]
         self.spaceship = SpaceshipEnsure.new(params[:username], params[:team_id], params[:team_name], api_token(params))
@@ -85,6 +72,10 @@ module Match
           spaceship.bundle_identifier_exists(username: params[:username], app_identifier: app_identifier, cached_bundle_ids: self.cache.bundle_ids)
         end
       end
+
+      # APNs authentication key, before anything else is created so a key match
+      # can't create (e.g. with an API key) fails the run before it changes anything
+      fetch_push_auth_key(params) if params[:push_auth_key]
 
       # Certificate
       cert_id = fetch_certificate(params: params, renew_expired_certs: params[:renew_expired_certs])
@@ -139,6 +130,48 @@ module Match
       storage.clear_changes if storage
     end
     # rubocop:enable Metrics/PerceivedComplexity
+
+    # Syncs only the APNs authentication key, without any certificate or profile
+    def run_push_auth_key(params)
+      self.files_to_commit = []
+      self.files_to_delete = []
+
+      FileUtils.mkdir_p(params[:output_path]) if params[:output_path]
+
+      FastlaneCore::PrintTable.print_values(config: params,
+                                             title: "Summary for match #{Fastlane::VERSION}")
+
+      prepare_storage(params)
+
+      unless params[:readonly]
+        self.spaceship = SpaceshipEnsure.new(params[:username], params[:team_id], params[:team_name], api_token(params))
+      end
+
+      fetch_push_auth_key(params)
+    ensure
+      storage.clear_changes if storage
+    end
+
+    # Downloads the storage and decrypts it
+    def prepare_storage(params)
+      update_optional_values_depending_on_storage_type(params)
+
+      # Choose the right storage and encryption implementations
+      storage_params = params
+      storage_params[:username] = params[:readonly] ? nil : params[:username] # only pass username if not readonly
+      self.storage = Storage.from_params(storage_params)
+      storage.download
+
+      # Init the encryption only after the `storage.download` was called to have the right working directory
+      self.encryption = Encryption.for_storage_mode(params[:storage_mode], {
+        git_url: params[:git_url],
+        s3_bucket: params[:s3_bucket],
+        s3_skip_encryption: params[:s3_skip_encryption],
+        working_directory: storage.working_directory,
+        force_legacy_encryption: params[:force_legacy_encryption]
+      })
+      self.encryption.decrypt_files if self.encryption
+    end
 
     def api_token(params)
       api_token = Spaceship::ConnectAPI::Token.from(hash: params[:api_key], filepath: params[:api_key_path])
@@ -259,6 +292,107 @@ module Match
       end
 
       return File.basename(cert_path).gsub(".cer", "") # Certificate ID
+    end
+
+    # Makes sure the APNs authentication key (.p8) of the team is in storage,
+    # creating it via pem if needed, and copies it to the output path
+    #
+    # @return (PEM::KeyManager::Result) the path to the copied .p8, the key ID and the team ID
+    def fetch_push_auth_key(params)
+      require 'pem/key_manager'
+      require 'pem/options'
+
+      key_dir = File.join(prefixed_working_directory, "keys", "apns")
+      key_path = select_push_auth_key(key_dir, params[:push_auth_key_id])
+      has_portal_session = !params[:readonly] && !Spaceship::Portal.client.nil?
+
+      if key_path
+        verify_push_auth_key_exists!(key_path) if has_portal_session
+        UI.success("Using the APNs authentication key '#{push_auth_key_id(key_path)}' from your storage")
+        team_id = spaceship.team_id if spaceship
+      else
+        UI.important("Couldn't find an APNs authentication key in your storage... getting one for you now")
+        UI.user_error!("No APNs authentication key found and cannot create a new one because you enabled `readonly`") if params[:readonly]
+        unless has_portal_session
+          UI.user_error!([
+            "Creating an APNs authentication key requires Apple ID login, not supported with App Store Connect API key authentication.",
+            "Pass `username` to sign in with your Apple ID, or import an existing .p8 with `fastlane match import_push_auth_key`."
+          ].join("\n"))
+        end
+
+        created = create_push_auth_key(params, key_dir)
+        key_path = created.path
+        team_id = created.team_id
+        self.files_to_commit << key_path
+      end
+
+      output_path = File.expand_path(params[:output_path] || ".")
+      exported_path = File.join(output_path, File.basename(key_path))
+      FileUtils.mkdir_p(output_path)
+      FileUtils.cp(key_path, exported_path)
+      File.chmod(0o600, exported_path)
+      UI.message("APNs authentication key: ".green + exported_path)
+
+      unless self.files_to_commit.empty?
+        begin
+          save_changes_immediately!(params)
+        rescue
+          UI.error("Saving the new APNs authentication key to your storage failed. Apple only hands out the .p8 once, so keep #{exported_path}")
+          UI.error("and add it with `fastlane match import_push_auth_key --push_auth_key_path #{exported_path}` once your storage works again.")
+          raise
+        end
+      end
+
+      self.push_auth_key = PEM::KeyManager::Result.new(exported_path, push_auth_key_id(key_path), team_id || params[:team_id])
+    end
+
+    # @return [String, nil] the .p8 in storage to use, if there is one
+    def select_push_auth_key(key_dir, key_id)
+      paths = Dir[File.join(key_dir, "AuthKey_*.p8")]
+      paths = paths.select { |path| push_auth_key_id(path) == key_id } unless key_id.to_s.empty?
+
+      if paths.count > 1
+        ids = paths.map { |path| push_auth_key_id(path) }
+        UI.user_error!("Found #{paths.count} APNs authentication keys in your storage (#{ids.join(', ')}). Pass `push_auth_key_id` to say which one to use.")
+      end
+
+      paths.first
+    end
+
+    def push_auth_key_id(path)
+      File.basename(path, ".p8").delete_prefix("AuthKey_")
+    end
+
+    # A key that is no longer on the team can't send pushes anymore. It isn't removed
+    # automatically: a run signed in to the wrong team would otherwise delete a key
+    # that Apple will never hand out again.
+    def verify_push_auth_key_exists!(key_path)
+      key_id = push_auth_key_id(key_path)
+      return if Spaceship.key.all.any? { |key| key.id == key_id }
+
+      UI.user_error!([
+        "The APNs authentication key '#{key_id}' in your storage doesn't exist on your team anymore.",
+        "If it was revoked, remove #{File.join('keys', 'apns', File.basename(key_path))} from your storage and run match again to create a new one."
+      ].join("\n"))
+    end
+
+    def create_push_auth_key(params, key_dir)
+      PEM.config = FastlaneCore::Configuration.create(PEM::Options.key_options, {
+        key_name: params[:push_auth_key_name],
+        key_id: params[:push_auth_key_id],
+        team_id: spaceship.team_id,
+        output_path: key_dir
+      }.compact)
+
+      lost_p8_advice = lambda do |key_id|
+        [
+          "  - import the existing AuthKey_#{key_id}.p8 with `fastlane match import_push_auth_key --push_auth_key_path <path>`",
+          "  - pass `push_auth_key_id` to use a different key",
+          "  - run `fastlane pem revoke_auth_key --key_id #{key_id}` and run match again to create a new one"
+        ]
+      end
+
+      PEM::KeyManager.create(login: false, lost_p8_advice: lost_p8_advice)
     end
 
     # Saves all pending file changes to storage right away, keeping the

@@ -74,6 +74,7 @@ describe Fastlane do
           update_fastlane
           s3
           match_nuke
+          match_push_auth_key
           trainer
         )
       end
