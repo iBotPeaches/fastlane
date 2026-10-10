@@ -6,7 +6,7 @@ describe Fastlane do
           get_push_auth_key
         end").runner.execute(:test)
 
-        expect(result).to start_with("/")
+        expect(Pathname.new(result)).to be_absolute
         expect(File.basename(result)).to eq("AuthKey_TEST12345.p8")
       end
 

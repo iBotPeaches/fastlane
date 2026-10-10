@@ -33,7 +33,7 @@ describe PEM do
           expect(result.team_id).to eq("ZZZTEAMID")
           path = result.path
           expect(File.read(path)).to eq(p8)
-          expect(format("%o", File.stat(path).mode)[-3..-1]).to eq("600")
+          expect(File.stat(path).mode & 0o777).to eq(0o600) unless FastlaneCore::Helper.windows? # NTFS has no POSIX mode bits
         end
       end
 
