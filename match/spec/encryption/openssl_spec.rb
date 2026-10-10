@@ -28,7 +28,7 @@ describe Match do
       key_path = File.join(@directory, "keys", "apns", "AuthKey_ABCD123456.p8")
       FileUtils.mkdir_p(File.dirname(key_path))
       key_content = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQg\n-----END PRIVATE KEY-----\n"
-      File.write(key_path, key_content)
+      File.binwrite(key_path, key_content)
 
       @e.encrypt_files
       expect(File.binread(key_path)).to_not(include("PRIVATE KEY"))
