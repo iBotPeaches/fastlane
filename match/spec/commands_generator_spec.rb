@@ -151,6 +151,45 @@ describe Match::CommandsGenerator do
     end
   end
 
+  describe ":push_auth_key option handling" do
+    it "only syncs the APNs authentication key" do
+      stub_commander_runner_args(['push_auth_key', '-r', 'git@github.com:you/your_repo.git', '--push_auth_key_id', 'ABCD123456'])
+
+      expected_options = FastlaneCore::Configuration.create(available_options, {
+        git_url: 'git@github.com:you/your_repo.git',
+        push_auth_key_id: 'ABCD123456'
+      })
+
+      fake_runner = "runner"
+      expect(Match::Runner).to receive(:new).and_return(fake_runner)
+      expect(fake_runner).to_not(receive(:run))
+      expect(fake_runner).to receive(:run_push_auth_key) do |actual_options|
+        expect(actual_options._values).to eq(expected_options._values)
+      end
+
+      Match::CommandsGenerator.start
+    end
+  end
+
+  describe ":import_push_auth_key option handling" do
+    it "imports the APNs authentication key" do
+      stub_commander_runner_args(['import_push_auth_key', '-r', 'git@github.com:you/your_repo.git', '--push_auth_key_path', __FILE__])
+
+      expected_options = FastlaneCore::Configuration.create(available_options, {
+        git_url: 'git@github.com:you/your_repo.git',
+        push_auth_key_path: __FILE__
+      })
+
+      fake_match_importer = double("fake match_importer")
+      expect(Match::Importer).to receive(:new).and_return(fake_match_importer)
+      expect(fake_match_importer).to receive(:import_push_auth_key) do |actual_options|
+        expect(actual_options._values).to eq(expected_options._values)
+      end
+
+      Match::CommandsGenerator.start
+    end
+  end
+
   def expect_nuke_run_with(expected_options, type)
     fake_nuke = "nuke"
     expect(Match::Nuke).to receive(:new).and_return(fake_nuke)

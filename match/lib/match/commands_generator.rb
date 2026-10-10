@@ -145,6 +145,32 @@ module Match
         end
       end
 
+      command :push_auth_key do |c|
+        c.syntax = "fastlane match push_auth_key"
+        c.description = "Syncs the APNs authentication key (.p8) of your team, without any certificate or profile"
+
+        FastlaneCore::CommanderGenerator.new.generate(Match::Options.available_options, command: c)
+
+        c.action do |args, options|
+          params = FastlaneCore::Configuration.create(Match::Options.available_options, options.__hash__)
+          params.load_configuration_file("Matchfile")
+          Match::Runner.new.run_push_auth_key(params)
+        end
+      end
+
+      command :import_push_auth_key do |c|
+        c.syntax = "fastlane match import_push_auth_key"
+        c.description = "Imports an existing APNs authentication key (.p8) into the encrypted repository"
+
+        FastlaneCore::CommanderGenerator.new.generate(Match::Options.available_options, command: c)
+
+        c.action do |args, options|
+          params = FastlaneCore::Configuration.create(Match::Options.available_options, options.__hash__)
+          params.load_configuration_file("Matchfile")
+          Match::Importer.new.import_push_auth_key(params)
+        end
+      end
+
       command :migrate do |c|
         c.syntax = "fastlane match migrate"
         c.description = "Migrate from one storage backend to another one"

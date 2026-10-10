@@ -383,6 +383,28 @@ module Match
                                      type: Boolean,
                                      default_value: false),
 
+        # APNs authentication key
+        FastlaneCore::ConfigItem.new(key: :push_auth_key,
+                                     env_name: "MATCH_PUSH_AUTH_KEY",
+                                     description: "Also sync the APNs authentication key (.p8) of your team. Creating one requires Apple ID login, not supported with App Store Connect API key authentication",
+                                     type: Boolean,
+                                     default_value: false),
+        FastlaneCore::ConfigItem.new(key: :push_auth_key_name,
+                                     env_name: "MATCH_PUSH_AUTH_KEY_NAME",
+                                     description: "The name of the APNs authentication key to look up or create on the Developer Portal",
+                                     default_value: "fastlane APNs Key"),
+        FastlaneCore::ConfigItem.new(key: :push_auth_key_id,
+                                     env_name: "MATCH_PUSH_AUTH_KEY_ID",
+                                     description: "The ID of the APNs authentication key to use, if your storage or your team has more than one",
+                                     optional: true),
+        FastlaneCore::ConfigItem.new(key: :push_auth_key_path,
+                                     env_name: "MATCH_PUSH_AUTH_KEY_PATH",
+                                     description: "Path to an existing APNs authentication key (.p8) to import. Only works with match import_push_auth_key",
+                                     optional: true,
+                                     verify_block: proc do |value|
+                                       UI.user_error!("Couldn't find the APNs authentication key at path '#{value}'") unless File.exist?(value)
+                                     end),
+
         # other
         FastlaneCore::ConfigItem.new(key: :verbose,
                                      env_name: "MATCH_VERBOSE",

@@ -24,6 +24,19 @@ describe Match do
       expect(File.binread(@full_path)).to eq(@content)
     end
 
+    it "encrypts and decrypts APNs authentication keys" do
+      key_path = File.join(@directory, "keys", "apns", "AuthKey_ABCD123456.p8")
+      FileUtils.mkdir_p(File.dirname(key_path))
+      key_content = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQg\n-----END PRIVATE KEY-----\n"
+      File.binwrite(key_path, key_content)
+
+      @e.encrypt_files
+      expect(File.binread(key_path)).to_not(include("PRIVATE KEY"))
+
+      @e.decrypt_files
+      expect(File.binread(key_path)).to eq(key_content)
+    end
+
     it "raises an exception if invalid password is passed" do
       stub_const('ENV', { "MATCH_PASSWORD" => '2"QAHg@v(Qp{=*n^' })
       @e.encrypt_files

@@ -361,6 +361,7 @@ After running _match_ for the first time, your Git repo or Google Cloud bucket w
 
 - The `certs` folder contains all certificates with their private keys
 - The `profiles` folder contains all provisioning profiles
+- The `keys` folder contains the APNs authentication key, if you [sync it with _match_](#apns-authentication-key)
 
 Additionally, _match_ creates a nice repo `README.md` for you, making it easy to onboard new team members:
 
@@ -417,6 +418,39 @@ If your profile requires the 'Offline support (7 day validity)' setting for use 
 
 > [!NOTE]
 > Offline profiles can only be created when logging in with an Apple ID. Apple's App Store Connect API (`api_key` / `api_key_path`) does not support this setting, so _match_ will fail with a clear error if both are combined.
+
+##### APNs authentication key
+
+_match_ can also keep the APNs authentication key (`.p8`) of your team in your storage, encrypted like your certificates. A key never expires and covers every app of your team, but Apple only lets you download its `.p8` once, so storing it is the only way to get it back on another machine.
+
+Sync it alongside your certificates and profiles with `push_auth_key`, e.g. in your `Matchfile`:
+
+```ruby-skip-tests
+push_auth_key(true)
+```
+
+Or sync only the key:
+
+```no-highlight
+fastlane match push_auth_key
+```
+
+```ruby
+match_push_auth_key(readonly: true)
+```
+
+The `.p8` is copied to `output_path` (the current directory if not set), and its path, key ID and team ID are available as `lane_context[SharedValues::MATCH_AUTH_KEY_PATH]`, `MATCH_AUTH_KEY_ID` and `MATCH_AUTH_KEY_TEAM_ID`.
+
+When your storage has no key yet, _match_ looks up the key named `push_auth_key_name` on the Developer Portal (or `push_auth_key_id`), downloads it if Apple still allows it, or creates a new one via _pem_, and saves it to your storage right away.
+
+If your team already has a key whose `.p8` was downloaded before, Apple won't hand it out again. Import the file you have instead:
+
+```no-highlight
+fastlane match import_push_auth_key --push_auth_key_path ./AuthKey_ABCD123456.p8
+```
+
+> [!NOTE]
+> APNs authentication keys are not part of Apple's App Store Connect API. Creating a key, or checking that a stored one still exists, requires logging in with an Apple ID. With `api_key` / `api_key_path`, _match_ only uses a key that is already in your storage.
 
 ##### Managed capabilities
 

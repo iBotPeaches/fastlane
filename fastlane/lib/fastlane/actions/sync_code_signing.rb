@@ -3,6 +3,9 @@ module Fastlane
     module SharedValues
       MATCH_PROVISIONING_PROFILE_MAPPING = :MATCH_PROVISIONING_PROFILE_MAPPING
       SIGH_PROFILE_TYPE ||= :SIGH_PROFILE_TYPE # originally defined in GetProvisioningProfileAction
+      MATCH_AUTH_KEY_PATH ||= :MATCH_AUTH_KEY_PATH
+      MATCH_AUTH_KEY_ID ||= :MATCH_AUTH_KEY_ID
+      MATCH_AUTH_KEY_TEAM_ID ||= :MATCH_AUTH_KEY_TEAM_ID
     end
 
     class SyncCodeSigningAction < Action
@@ -16,10 +19,18 @@ module Fastlane
           params[:api_key] ||= Actions.lane_context[SharedValues::APP_STORE_CONNECT_API_KEY]
         end
 
-        Match::Runner.new.run(params)
+        runner = Match::Runner.new
+        runner.run(params)
 
         define_profile_type(params)
         define_provisioning_profile_mapping(params)
+        define_push_auth_key(runner.push_auth_key) if runner.push_auth_key
+      end
+
+      def self.define_push_auth_key(push_auth_key)
+        Actions.lane_context[SharedValues::MATCH_AUTH_KEY_PATH] = push_auth_key.path
+        Actions.lane_context[SharedValues::MATCH_AUTH_KEY_ID] = push_auth_key.key_id
+        Actions.lane_context[SharedValues::MATCH_AUTH_KEY_TEAM_ID] = push_auth_key.team_id
       end
 
       def self.define_profile_type(params)
@@ -82,7 +93,10 @@ module Fastlane
       def self.output
         [
           ['MATCH_PROVISIONING_PROFILE_MAPPING', 'The match provisioning profile mapping'],
-          ['SIGH_PROFILE_TYPE', 'The profile type, can be app-store, ad-hoc, development, enterprise, can be used in `build_app` as a default value for `export_method`']
+          ['SIGH_PROFILE_TYPE', 'The profile type, can be app-store, ad-hoc, development, enterprise, can be used in `build_app` as a default value for `export_method`'],
+          ['MATCH_AUTH_KEY_PATH', 'The path to the .p8 APNs authentication key, when `push_auth_key` is set'],
+          ['MATCH_AUTH_KEY_ID', 'The ID of the APNs authentication key, when `push_auth_key` is set'],
+          ['MATCH_AUTH_KEY_TEAM_ID', 'The ID of the Developer Portal team the APNs authentication key belongs to, when `push_auth_key` is set']
         ]
       end
 
