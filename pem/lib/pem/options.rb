@@ -7,9 +7,6 @@ require_relative 'module'
 module PEM
   class Options
     def self.available_options
-      user = CredentialsManager::AppfileConfig.try_fetch_value(:apple_dev_portal_id)
-      user ||= CredentialsManager::AppfileConfig.try_fetch_value(:apple_id)
-
       [
         FastlaneCore::ConfigItem.new(key: :platform,
                                      description: "Set certificate's platform. Used for creation of production & development certificates. Supported platforms: ios, macos",
@@ -68,6 +65,69 @@ module PEM
                                      code_gen_sensitive: true,
                                      default_value: CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier),
                                      default_value_dynamic: true),
+        *shared_auth_options,
+        FastlaneCore::ConfigItem.new(key: :p12_password,
+                                     short_option: "-p",
+                                     env_name: "PEM_P12_PASSWORD",
+                                     sensitive: true,
+                                     description: "The password that is used for your p12 file",
+                                     optional: true),
+        FastlaneCore::ConfigItem.new(key: :pem_name,
+                                     short_option: "-o",
+                                     env_name: "PEM_FILE_NAME",
+                                     description: "The file name of the generated .pem file",
+                                     optional: true),
+        FastlaneCore::ConfigItem.new(key: :output_path,
+                                     short_option: "-e",
+                                     env_name: "PEM_OUTPUT_PATH",
+                                     description: "The path to a directory in which all certificates and private keys should be stored",
+                                     default_value: ".")
+      ]
+    end
+
+    # The options for the APNs authentication key (.p8) commands.
+    #
+    # Auth keys are team wide and never expire, so none of the certificate
+    # specific options (platform, development, website_push, voip_push,
+    # app_identifier, p12, ...) apply to them.
+    def self.key_options
+      [
+        FastlaneCore::ConfigItem.new(key: :key_name,
+                                     short_option: "-k",
+                                     env_name: "PEM_KEY_NAME",
+                                     description: "The name of the APNs authentication key, as shown in the Developer Portal",
+                                     default_value: "fastlane APNs Key"),
+        FastlaneCore::ConfigItem.new(key: :key_id,
+                                     short_option: "-i",
+                                     env_name: "PEM_KEY_ID",
+                                     description: "The ID of an existing APNs authentication key to use instead of looking one up by name",
+                                     optional: true),
+        FastlaneCore::ConfigItem.new(key: :force,
+                                     env_name: "PEM_KEY_FORCE",
+                                     description: "Create a new APNs authentication key, even if one already exists",
+                                     is_string: false,
+                                     default_value: false),
+        FastlaneCore::ConfigItem.new(key: :skip_confirmation,
+                                     env_name: "PEM_SKIP_CONFIRMATION",
+                                     description: "Revoke the authentication key without asking for a confirmation first",
+                                     is_string: false,
+                                     default_value: false),
+        *shared_auth_options,
+        FastlaneCore::ConfigItem.new(key: :output_path,
+                                     short_option: "-e",
+                                     env_name: "PEM_OUTPUT_PATH",
+                                     description: "The path to a directory in which the .p8 authentication key should be stored",
+                                     default_value: ".")
+      ]
+    end
+
+    # The Developer Portal credentials shared by every pem command.
+    # Keep the env names and short options identical across both option lists.
+    def self.shared_auth_options
+      user = CredentialsManager::AppfileConfig.try_fetch_value(:apple_dev_portal_id)
+      user ||= CredentialsManager::AppfileConfig.try_fetch_value(:apple_id)
+
+      [
         FastlaneCore::ConfigItem.new(key: :username,
                                      short_option: "-u",
                                      env_name: "PEM_USERNAME",
@@ -95,24 +155,9 @@ module PEM
                                      default_value_dynamic: true,
                                      verify_block: proc do |value|
                                        ENV["FASTLANE_TEAM_NAME"] = value.to_s
-                                     end),
-        FastlaneCore::ConfigItem.new(key: :p12_password,
-                                     short_option: "-p",
-                                     env_name: "PEM_P12_PASSWORD",
-                                     sensitive: true,
-                                     description: "The password that is used for your p12 file",
-                                     optional: true),
-        FastlaneCore::ConfigItem.new(key: :pem_name,
-                                     short_option: "-o",
-                                     env_name: "PEM_FILE_NAME",
-                                     description: "The file name of the generated .pem file",
-                                     optional: true),
-        FastlaneCore::ConfigItem.new(key: :output_path,
-                                     short_option: "-e",
-                                     env_name: "PEM_OUTPUT_PATH",
-                                     description: "The path to a directory in which all certificates and private keys should be stored",
-                                     default_value: ".")
+                                     end)
       ]
     end
+    private_class_method :shared_auth_options
   end
 end

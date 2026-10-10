@@ -107,7 +107,7 @@ module Spaceship
       private
 
       def find_service(service_id)
-        services.find do |service|
+        (services || []).find do |service|
           service['id'] == service_id
         end
       end
