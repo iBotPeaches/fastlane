@@ -17,6 +17,7 @@ To automate iOS Provisioning profiles you can use [_match_](https://docs.fastlan
 <p align="center">
     <a href="#features">Features</a> &bull;
     <a href="#usage">Usage</a> &bull;
+    <a href="#authentication-keys-instead-of-certificates">Authentication keys</a> &bull;
     <a href="#how-does-it-work">How does it work?</a>
 </p>
 
@@ -96,7 +97,6 @@ To get a list of available options run:
 fastlane action pem
 ```
 
-
 ### Note about empty `p12` passwords and Keychain Access.app
 
 _pem_ will produce a valid `p12` without specifying a password, or using the empty-string as the password.
@@ -129,6 +129,42 @@ Enter Export Password:
 ## Environment Variables
 
 Run `fastlane action pem` to get a list of available environment variables.
+
+# Authentication keys instead of certificates
+
+A push certificate expires after a year, only covers one bundle identifier and comes in separate development and production flavours. Apple's token based alternative is an **APNs authentication key**: a single `.p8` file that never expires, covers the sandbox and the production environment at once and is shared by every app of your team.
+
+To create one, or to download the one you already have:
+
+```no-highlight
+fastlane pem auth_key
+```
+
+This writes `AuthKey_<KEY ID>.p8` to the output path. Together with the key ID (part of the file name) and your team ID, that is everything a server needs to sign APNs requests.
+
+To see every authentication key of your team, or to revoke one:
+
+```no-highlight
+fastlane pem list_auth_keys
+fastlane pem revoke_auth_key --key_id ABCD123456
+```
+
+Revoking asks for a confirmation first. On CI, where nobody can answer, pass `--skip_confirmation`.
+
+In a `Fastfile`, use the `get_push_auth_key` action. It sets `PEM_AUTH_KEY_PATH`, `PEM_AUTH_KEY_ID` and `PEM_AUTH_KEY_TEAM_ID` in the lane context.
+
+```ruby
+get_push_auth_key(
+  key_name: "Push notifications",
+  output_path: "./keys"
+)
+```
+
+Three things are worth knowing before you switch:
+
+- **Apple only lets you download a `.p8` once.** There is no way to get it again. _pem_ reuses the file in `output_path` when it is already there, and refuses to silently create a second key when the existing one can no longer be downloaded — it tells you to supply the file, to revoke the key, or to pass `--force` if you really want an extra key. Apple limits how many authentication keys a team can hold, so `--force` is not something to put in a lane.
+- **A key is team wide.** The `app_identifier` option does not apply to it, and revoking a key stops push notifications for every app and every server that uses it.
+- **Authentication keys only exist on the Developer Portal**, which has no App Store Connect API. _pem_ therefore always signs in with your Apple ID for these commands — on CI you need a `FASTLANE_SESSION`, an App Store Connect API key will not work.
 
 # How does it work?
 

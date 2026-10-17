@@ -7,6 +7,15 @@ describe Spaceship::Portal::Key do
     Spaceship::Portal::Key.client = mock_client
   end
 
+  describe 'Spaceship::Portal.key' do
+    it 'hands out the model with the portal client attached' do
+      allow(Spaceship::Portal).to receive(:client).and_return(mock_client)
+
+      expect(Spaceship::Portal.key).to eq(Spaceship::Portal::Key)
+      expect(Spaceship.key).to eq(Spaceship::Portal::Key)
+    end
+  end
+
   describe '.all' do
     it 'uses the client to fetch all keys' do
       mock_client_response(:list_keys, with: no_args) do
@@ -125,6 +134,17 @@ describe Spaceship::Portal::Key do
       expect(key).to have_apns
       expect(key).to have_music_kit
       expect(key).to have_device_check
+    end
+
+    it 'treats a key without any service as having none of them' do
+      key = Spaceship::Portal::Key.new('keyId' => 'some-key-id')
+      mock_client_response(:get_key) do
+        { keyId: 'some-key-id' }
+      end
+
+      expect(key).to_not(have_apns)
+      expect(key).to_not(have_music_kit)
+      expect(key).to_not(have_device_check)
     end
 
     it 'should have a way of getting the service configurations' do
