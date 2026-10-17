@@ -77,6 +77,34 @@ describe PEM do
         end
       end
 
+      it "shows the caller's advice instead of pem's when the p8 can't be downloaded again" do
+        Dir.mktmpdir do |dir|
+          key = pem_stub_key(can_download: false)
+          expect(key_class).to receive(:all).and_return([key])
+
+          configure(output_path: dir)
+          advice = ->(key_id) { ["  - import AuthKey_#{key_id}.p8"] }
+          expect do
+            PEM::KeyManager.create(lost_p8_advice: advice)
+          end.to raise_error(FastlaneCore::Interface::FastlaneError) { |error|
+            expect(error.message).to include("  - import AuthKey_ABCD123456.p8")
+            expect(error.message).to_not(include("revoke_auth_key"))
+          }
+        end
+      end
+
+      it "uses the existing Developer Portal session when login is false" do
+        Dir.mktmpdir do |dir|
+          key = pem_stub_key(can_download: true)
+          expect(key_class).to receive(:all).and_return([key])
+          expect(key).to receive(:download).and_return(p8)
+          expect(Spaceship).to_not(receive(:login))
+
+          configure(output_path: dir)
+          expect(PEM::KeyManager.create(login: false).key_id).to eq("ABCD123456")
+        end
+      end
+
       it "ignores the existing key when force is set" do
         Dir.mktmpdir do |dir|
           created = pem_stub_key(id: "NEWKEY1234")

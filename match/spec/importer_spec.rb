@@ -122,6 +122,70 @@ describe Match do
       Match::Importer.new.import_cert(developer_id_config, cert_path: cert_path, p12_path: p12_path)
     end
 
+    describe "#import_push_auth_key" do
+      let(:p8) { "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n" }
+      let(:source_dir) { Dir.mktmpdir }
+
+      def write_p8(name, content = p8)
+        path = File.join(source_dir, name)
+        File.write(path, content)
+        path
+      end
+
+      it "imports a .p8 into the match repo, reading the key ID from Apple's file name" do
+        repo_dir = Dir.mktmpdir
+        config = FastlaneCore::Configuration.create(Match::Options.available_options, test_values.merge(push_auth_key_path: write_p8("AuthKey_ABCD123456.p8")))
+        setup_fake_storage(repo_dir, config)
+
+        expect(Spaceship::ConnectAPI).to receive(:login)
+        expect(Spaceship).to receive(:key).and_return(double("Spaceship::Portal::Key", all: [double("key", id: "ABCD123456", has_apns?: true)]))
+        dest_path = File.join(repo_dir, "keys", "apns", "AuthKey_ABCD123456.p8")
+        expect(fake_storage).to receive(:save_changes!).with(files_to_commit: [dest_path])
+        expect(fake_storage).to receive(:clear_changes)
+
+        Match::Importer.new.import_push_auth_key(config)
+
+        expect(File.binread(dest_path)).to_not(include("PRIVATE KEY")) # encrypted before saving
+      end
+
+      it "fails when the key doesn't exist on the team" do
+        repo_dir = Dir.mktmpdir
+        config = FastlaneCore::Configuration.create(Match::Options.available_options, test_values.merge(push_auth_key_path: write_p8("AuthKey_ABCD123456.p8")))
+        setup_fake_storage(repo_dir, config)
+
+        expect(Spaceship::ConnectAPI).to receive(:login)
+        expect(Spaceship).to receive(:key).and_return(double("Spaceship::Portal::Key", all: []))
+        expect(fake_storage).to_not(receive(:save_changes!))
+        expect(fake_storage).to receive(:clear_changes)
+
+        expect do
+          Match::Importer.new.import_push_auth_key(config)
+        end.to raise_error(FastlaneCore::Interface::FastlaneError, /Couldn't find an authentication key with the ID 'ABCD123456'/)
+      end
+
+      it "takes the key ID from push_auth_key_id and skips the Developer Portal with skip_certificate_matching" do
+        repo_dir = Dir.mktmpdir
+        values = test_values.merge(push_auth_key_path: write_p8("push.p8"), push_auth_key_id: "ABCD123456", skip_certificate_matching: true)
+        config = FastlaneCore::Configuration.create(Match::Options.available_options, values)
+        setup_fake_storage(repo_dir, config)
+
+        expect(Spaceship::ConnectAPI).to_not(receive(:login))
+        expect(fake_storage).to receive(:save_changes!).with(files_to_commit: [File.join(repo_dir, "keys", "apns", "AuthKey_ABCD123456.p8")])
+        expect(fake_storage).to receive(:clear_changes)
+
+        Match::Importer.new.import_push_auth_key(config)
+      end
+
+      it "refuses a file that isn't a private key before touching the storage" do
+        config = FastlaneCore::Configuration.create(Match::Options.available_options, test_values.merge(push_auth_key_path: write_p8("AuthKey_ABCD123456.p8", "not a key")))
+        expect(Match::Storage::GitStorage).to_not(receive(:configure))
+
+        expect do
+          Match::Importer.new.import_push_auth_key(config)
+        end.to raise_error(FastlaneCore::Interface::FastlaneError, /isn't an APNs authentication key/)
+      end
+    end
+
     def setup_fake_storage(repo_dir, config)
       expect(Match::Storage::GitStorage).to receive(:configure).with({
         git_url: config[:git_url],

@@ -20,16 +20,19 @@ module PEM
     class << self
       # Makes sure an APNs authentication key exists and that its .p8 is on disk
       #
+      # @param login (Boolean) false when the caller already logged in to the Developer Portal (e.g. match)
+      # @param lost_p8_advice (Proc) given the key ID, returns the lines to show instead of pem's own
+      #   when the key exists but its .p8 can't be downloaded anymore
       # @return (Result) the path to the .p8, the key ID and the team ID
-      def create
+      def create(login: true, lost_p8_advice: nil)
         FastlaneCore::PrintTable.print_values(config: PEM.config, title: "Summary for PEM #{Fastlane::VERSION}")
 
         # Do this before talking to Apple: a key we can't store is a key that is lost
         ensure_output_path!
-        PEM::Manager.login
+        PEM::Manager.login if login
 
         key = find_existing_key
-        return use_existing_key(key) if key
+        return use_existing_key(key, lost_p8_advice: lost_p8_advice) if key
 
         create_new_key
       end
@@ -134,7 +137,7 @@ module PEM
         matches.first
       end
 
-      def use_existing_key(key)
+      def use_existing_key(key, lost_p8_advice: nil)
         path = p8_path(key.id)
 
         if File.exist?(path)
@@ -147,14 +150,22 @@ module PEM
           return report(key, write_p8(key))
         end
 
+        advice = lost_p8_advice ? lost_p8_advice.call(key.id) : default_lost_p8_advice(key.id)
+
         UI.user_error!([
           "The authentication key '#{label(key)}' (#{key.id}) exists, but Apple only lets you download a .p8 once and it has already been downloaded.",
           "There is no way to download it again. You can either:",
-          "  - place the existing AuthKey_#{key.id}.p8 in #{output_path}",
-          "  - pass --key_id to use a different key",
-          "  - run `fastlane pem revoke_auth_key --key_id #{key.id}` and create a new one",
-          "  - run `fastlane pem auth_key --force` to create an additional key, if your team is still below Apple's limit"
+          *advice
         ].join("\n"))
+      end
+
+      def default_lost_p8_advice(key_id)
+        [
+          "  - place the existing AuthKey_#{key_id}.p8 in #{output_path}",
+          "  - pass --key_id to use a different key",
+          "  - run `fastlane pem revoke_auth_key --key_id #{key_id}` and create a new one",
+          "  - run `fastlane pem auth_key --force` to create an additional key, if your team is still below Apple's limit"
+        ]
       end
 
       def create_new_key

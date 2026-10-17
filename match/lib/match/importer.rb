@@ -14,20 +14,7 @@ module Match
       p12_path = ensure_valid_file_path(p12_path, "Private key", ".p12")
       profile_path = ensure_valid_file_path(profile_path, "Provisioning profile", ".mobileprovision or .provisionprofile", optional: true)
 
-      # Storage
-      storage = Storage.from_params(params)
-      storage.download
-
-      # Encryption
-      encryption = Encryption.for_storage_mode(params[:storage_mode], {
-        git_url: params[:git_url],
-        s3_bucket: params[:s3_bucket],
-        s3_skip_encryption: params[:s3_skip_encryption],
-        working_directory: storage.working_directory,
-        force_legacy_encryption: params[:force_legacy_encryption]
-      })
-      encryption.decrypt_files if encryption
-      UI.success("Repo is at: '#{storage.working_directory}'")
+      storage, encryption = prepare_storage(params)
 
       # Map match type into Spaceship::ConnectAPI::Certificate::CertificateType
       cert_type = Match.cert_type_sym(params[:type])
@@ -126,6 +113,45 @@ module Match
       storage.clear_changes if storage
     end
 
+    def import_push_auth_key(params)
+      p8_path = ensure_valid_file_path(params[:push_auth_key_path], "APNs authentication key", ".p8")
+      unless File.read(p8_path).include?("PRIVATE KEY")
+        UI.user_error!("'#{p8_path}' isn't an APNs authentication key, it has no PRIVATE KEY")
+      end
+
+      key_id = params[:push_auth_key_id].to_s
+      key_id = File.basename(p8_path, ".p8")[/\AAuthKey_(\w+)\z/, 1].to_s if key_id.empty?
+      key_id = UI.input("Key ID of the APNs authentication key:").to_s.strip if key_id.empty? && UI.interactive?
+      UI.user_error!("Pass `push_auth_key_id`, the ID of the APNs authentication key, as it can't be read from the file name") if key_id.empty?
+
+      storage, encryption = prepare_storage(params)
+
+      # Keys aren't part of the App Store Connect API, so only an Apple ID session can check them
+      if params[:skip_certificate_matching]
+        UI.important("Not checking that the key '#{key_id}' exists on your team, since `skip_certificate_matching` is set")
+      elsif Spaceship::ConnectAPI::Token.from(hash: params[:api_key], filepath: params[:api_key_path])
+        UI.important("Not checking that the key '#{key_id}' exists on your team, App Store Connect API keys can't list APNs authentication keys")
+      else
+        UI.message("Login to the Developer Portal (#{params[:username]})")
+        Spaceship::ConnectAPI.login(params[:username], use_portal: true, use_tunes: false, portal_team_id: params[:team_id], team_name: params[:team_name])
+
+        key = Spaceship.key.all.find { |k| k.id == key_id }
+        UI.user_error!("Couldn't find an authentication key with the ID '#{key_id}' on your team") if key.nil?
+        UI.user_error!("The authentication key '#{key_id}' is not enabled for APNs") unless key.has_apns?
+      end
+
+      output_dir = File.join(storage.prefixed_working_directory, "keys", "apns")
+      FileUtils.mkdir_p(output_dir)
+      dest_p8_path = File.join(output_dir, "AuthKey_#{key_id}.p8")
+      IO.copy_stream(p8_path, dest_p8_path)
+
+      # Encrypt and commit
+      encryption.encrypt_files if encryption
+      storage.save_changes!(files_to_commit: [dest_p8_path])
+    ensure
+      storage.clear_changes if storage
+    end
+
     def ensure_valid_file_path(file_path, file_description, file_extension, optional: false)
       optional_file_message = optional ? " or leave empty to skip this file" : ""
       file_path ||= UI.input("#{file_description} (#{file_extension}) path#{optional_file_message}:")
@@ -134,6 +160,26 @@ module Match
       file_path = File.exist?(file_path) ? file_path : nil
       UI.user_error!("#{file_description} does not exist at path: #{file_path}") unless !file_path.nil? || optional
       file_path
+    end
+
+    private
+
+    # @return [Array] the downloaded and decrypted storage, and its encryption
+    def prepare_storage(params)
+      storage = Storage.from_params(params)
+      storage.download
+
+      encryption = Encryption.for_storage_mode(params[:storage_mode], {
+        git_url: params[:git_url],
+        s3_bucket: params[:s3_bucket],
+        s3_skip_encryption: params[:s3_skip_encryption],
+        working_directory: storage.working_directory,
+        force_legacy_encryption: params[:force_legacy_encryption]
+      })
+      encryption.decrypt_files if encryption
+      UI.success("Repo is at: '#{storage.working_directory}'")
+
+      return storage, encryption
     end
   end
 end
